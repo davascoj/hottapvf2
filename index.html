@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Modelo 3D</title>
+<script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+<style>
+html,body{
+margin:0;
+width:100%;
+height:100%;
+overflow:hidden;
+background:#111;
+}
+model-viewer{
+width:100%;
+height:100vh;
+background:#111;
+}
+.panel{
+position:fixed;
+left:10px;
+top:10px;
+z-index:10;
+font-family:Arial, sans-serif;
+font-size:14px;
+color:white;
+background:rgba(0,0,0,.55);
+padding:8px 12px;
+border-radius:8px;
+}
+.zoom-panel{
+position:fixed;
+right:10px;
+bottom:10px;
+z-index:20;
+display:flex;
+gap:8px;
+font-family:Arial, sans-serif;
+}
+.zoom-panel button{
+font-size:20px;
+min-width:44px;
+height:44px;
+border:none;
+border-radius:10px;
+background:rgba(255,255,255,.9);
+cursor:pointer;
+padding:0 12px;
+}
+</style>
+</head>
+<body>
+<div class="panel">Modelo 3D - mover con mouse o dedo</div>
+
+<model-viewer
+id="viewer"
+src="modelo.glb"
+camera-controls
+disable-zoom
+auto-rotate
+shadow-intensity="1"
+exposure="1"
+ar
+camera-orbit="auto auto auto"
+min-camera-orbit="auto auto 3%"
+max-camera-orbit="auto auto auto"
+interaction-prompt="auto">
+</model-viewer>
+
+<div class="zoom-panel">
+<button id="zoomOut" title="Alejar">−</button>
+<button id="centerModel" title="Centrar modelo">Centrar</button>
+<button id="zoomIn" title="Acercar">+</button>
+</div>
+
+<script>
+const viewer = document.getElementById("viewer");
+
+const ZOOM_MIN_PERCENT = 0.03;
+const ZOOM_STEP = 0.09;
+
+function getMaxDimension() {
+  try {
+    const d = viewer.getDimensions();
+    return Math.max(d.x || 1, d.y || 1, d.z || 1);
+  } catch (e) {
+    return 1;
+  }
+}
+
+function getLimits(currentRadius) {
+  const maxDim = getMaxDimension();
+  const minRadius = Math.max(maxDim * ZOOM_MIN_PERCENT, 0.05);
+  const maxRadius = Math.max(maxDim * 25, currentRadius * 3, 10);
+  return { minRadius, maxRadius };
+}
+
+function centrarModelo() {
+  try {
+    const maxDim = getMaxDimension();
+
+    // En celular se deja un poco más de distancia para que el modelo entre completo.
+    const esCelular = window.innerWidth < 768 || window.innerHeight > window.innerWidth;
+    const radioEncuadre = Math.max(maxDim * (esCelular ? 2.35 : 1.75), 2);
+
+    // Centra la cámara en el centro real del modelo cuando model-viewer ya lo calculó.
+    if (viewer.getBoundingBoxCenter) {
+      const c = viewer.getBoundingBoxCenter();
+      viewer.cameraTarget = `${c.x}m ${c.y}m ${c.z}m`;
+    } else {
+      viewer.cameraTarget = "auto auto auto";
+    }
+
+    viewer.cameraOrbit = `45deg 60deg ${radioEncuadre}m`;
+
+    if (viewer.jumpCameraToGoal) {
+      viewer.jumpCameraToGoal();
+    }
+  } catch (e) {
+    console.log("Centrar modelo no disponible todavia", e);
+  }
+}
+
+viewer.addEventListener("load", function() {
+  // Espera corta para que model-viewer calcule dimensiones y luego encuadra.
+  setTimeout(centrarModelo, 250);
+});
+
+let resizeTimer = null;
+window.addEventListener("resize", function() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(centrarModelo, 300);
+});
+
+function aplicarZoom(factor) {
+  try {
+    const orbit = viewer.getCameraOrbit();
+    let radius = orbit.radius * factor;
+    const limits = getLimits(orbit.radius);
+
+    if (radius < limits.minRadius) radius = limits.minRadius;
+    if (radius > limits.maxRadius) radius = limits.maxRadius;
+
+    viewer.cameraOrbit = `${orbit.theta}rad ${orbit.phi}rad ${radius}m`;
+  } catch (e) {
+    console.log("Zoom no disponible todavia", e);
+  }
+}
+
+// Zoom suave con rueda del mouse.
+// Esto evita el zoom brusco del control nativo.
+viewer.addEventListener("wheel", function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  const factor = e.deltaY > 0 ? (1 + ZOOM_STEP) : (1 - ZOOM_STEP);
+  aplicarZoom(factor);
+}, { passive: false, capture: true });
+
+document.getElementById("zoomIn").addEventListener("click", function() {
+  aplicarZoom(1 - ZOOM_STEP);
+});
+
+document.getElementById("zoomOut").addEventListener("click", function() {
+  aplicarZoom(1 + ZOOM_STEP);
+});
+
+document.getElementById("centerModel").addEventListener("click", function() {
+  centrarModelo();
+});
+</script>
+
+</body>
+</html>
